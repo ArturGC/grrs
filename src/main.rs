@@ -6,46 +6,65 @@ use std::{
 };
 
 #[derive(Parser)]
-struct Cli {
+struct CLI {
     pattern: String,
     path: std::path::PathBuf,
 }
 
-fn get_reader(path: &std::path::PathBuf) -> Result<BufReader<File>, anyhow::Error> {
-    File::open(&path)
-        .map(|f| BufReader::new(f))
-        .with_context(|| format!("could no read from file `{}`", path.display()))
+struct Reader {
+    path: std::path::PathBuf,
+    reader: BufReader<File>,
+}
+impl Reader {
+    fn new(path: &std::path::PathBuf) -> Result<Reader, anyhow::Error> {
+        File::open(&path)
+            .map(|f| Reader {
+                path: path.clone(),
+                reader: BufReader::new(f),
+            })
+            .with_context(|| format!("could not read from file `{}`", path.display()))
+    }
+    fn get_line(&mut self) -> Result<String, anyhow::Error> {
+        let mut line = String::new();
+
+        self.reader
+            .read_line(&mut line)
+            .map(|_| line)
+            .with_context(|| format!("could not read line from file `{}`", self.path.display()))
+    }
 }
 
-fn get_next_line(reader: &mut BufReader<File>) -> Result<String, anyhow::Error> {
-    let mut line = String::new();
-
-    reader
-        .read_line(&mut line)
-        .map(|_| line)
-        .with_context(|| format!("could no read line from file"))
+struct Grep {
+    pattern: String,
 }
+impl Grep {
+    fn new(pattern: &String) -> Grep {
+        Grep {
+            pattern: pattern.clone(),
+        }
+    }
+    fn check(&self, line: String) {
+        let data = line.trim_end();
 
-fn check_pattern(line: String, pattern: &String) {
-    let line = line.trim_end();
-
-    if line.contains(pattern) {
-        println!("MATCH: {}", line);
-    } else {
-        println!("FAIL: {}", line);
-    };
+        if data.contains(&self.pattern) {
+            println!("MATCH: {}", data);
+        } else {
+            println!("FAIL: {}", data);
+        };
+    }
 }
 
 fn main() -> Result<()> {
-    let args = Cli::parse();
+    let args = CLI::parse();
 
-    let mut reader = get_reader(&args.path)?;
+    let grep = Grep::new(&args.pattern);
+    let mut reader = Reader::new(&args.path)?;
 
     loop {
-        let line = get_next_line(&mut reader)?;
+        let line = reader.get_line()?;
 
         if line.len() != 0 {
-            check_pattern(line, &args.pattern);
+            grep.check(line);
         } else {
             break;
         };
